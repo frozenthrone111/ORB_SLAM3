@@ -95,7 +95,7 @@ int main(int argc, char **argv)
   ImageGrabber igb(&SLAM,&imugb,bEqual); // TODO
   
   // Maximum delay, 5 seconds
-  ros::Subscriber sub_imu = n.subscribe("/imu", 1000, &ImuGrabber::GrabImu, &imugb); 
+  ros::Subscriber sub_imu = n.subscribe("/android/imu", 2000, &ImuGrabber::GrabImu, &imugb);  //imu
   ros::Subscriber sub_img0 = n.subscribe("/camera/image_raw", 100, &ImageGrabber::GrabImage,&igb);
 
   std::thread sync_thread(&ImageGrabber::SyncWithImu,&igb);
@@ -162,11 +162,20 @@ void ImageGrabber::SyncWithImu()
       {
         // Load imu measurements from buffer
         vImuMeas.clear();
-        while(!mpImuGb->imuBuf.empty() && mpImuGb->imuBuf.front()->header.stamp.toSec()<=tIm)
+        static bool time_flag = true;
+        static auto TIME_OFFSET = 0.0;
+        if(time_flag){
+          TIME_OFFSET = mpImuGb->imuBuf.front()->header.stamp.toSec()-tIm;
+          time_flag = false;
+        }
+        //cout<<"imu_time: "<<setprecision(11)<<mpImuGb->imuBuf.front()->header.stamp.toSec()-TIME_OFFSET<<endl;
+        //cout<<"image_time: "<<setprecision(11)<<tIm<<endl;
+        while(!mpImuGb->imuBuf.empty() && mpImuGb->imuBuf.front()->header.stamp.toSec()-TIME_OFFSET<=tIm)
         {
-          double t = mpImuGb->imuBuf.front()->header.stamp.toSec();
+          double t = mpImuGb->imuBuf.front()->header.stamp.toSec() - TIME_OFFSET;
           cv::Point3f acc(mpImuGb->imuBuf.front()->linear_acceleration.x, mpImuGb->imuBuf.front()->linear_acceleration.y, mpImuGb->imuBuf.front()->linear_acceleration.z);
           cv::Point3f gyr(mpImuGb->imuBuf.front()->angular_velocity.x, mpImuGb->imuBuf.front()->angular_velocity.y, mpImuGb->imuBuf.front()->angular_velocity.z);
+          //cout<<"imudata: "<< t<<" "<<acc.x<<" "<<acc.y<<" "<<acc.z<<" "<<gyr.x<<" "<<gyr.y<<" "<<gyr.z<<endl;
           vImuMeas.push_back(ORB_SLAM3::IMU::Point(acc,gyr,t));
           mpImuGb->imuBuf.pop();
         }
